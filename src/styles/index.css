@@ -1,0 +1,211 @@
+:root {
+  --bg-deep: #08090b;
+  --bg-panel: #101215;
+  --bg-panel-hover: #171a1e;
+  --bg-subtle: #191c20;
+  --border-dim: #23272d;
+  --border-light: #39404a;
+
+  --amber: #ffb422;
+  --amber-dim: #99690f;
+  --amber-glow: rgba(255, 180, 34, 0.25);
+  
+  --red-alarm: #ff4136;
+  --red-glow: rgba(255, 65, 54, 0.35);
+
+  --green-term: #39e66d;
+  --green-glow: rgba(57, 230, 109, 0.2);
+
+  --blue-tech: #4dabf7;
+
+  --text-main: #e2ddd3;
+  --text-muted: #828892;
+  --text-dim: #545b66;
+
+  --font-mono: 'JetBrains Mono', 'Share Tech Mono', monospace, ui-monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg-deep);
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* CRT Screen Effect */
+.crt-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.02),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.02)
+  );
+  background-size: 100% 3px, 6px 100%;
+}
+
+.crt-vignette {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9998;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.85);
+}
+
+/* Animations */
+@keyframes flicker {
+  0% { opacity: 0.98; }
+  50% { opacity: 1; }
+  52% { opacity: 0.92; }
+  54% { opacity: 1; }
+  80% { opacity: 0.97; }
+  100% { opacity: 1; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 10px var(--red-glow), inset 0 0 5px var(--red-glow);
+    border-color: var(--red-alarm);
+  }
+  50% {
+    box-shadow: 0 0 25px var(--red-glow), inset 0 0 15px var(--red-glow);
+    border-color: #ff7675;
+  }
+}
+
+@keyframes glitchAnim {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-1px, -1px); }
+  60% { transform: translate(2px, 1px); }
+  80% { transform: translate(1px, -2px); }
+  100% { transform: translate(0); }
+}
+
+.glitch-active {
+  animation: glitchAnim 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite both;
+}
+
+.pulse-alarm {
+  animation: pulseGlow 1.4s ease-in-out infinite;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-panel);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--amber);
+}
+
+/* Buttons */
+.btn-control {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  color: var(--amber);
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  letter-spacing: 0.5px;
+}
+
+.btn-control:hover:not(:disabled) {
+  background: var(--amber);
+  color: #000;
+  box-shadow: 0 0 12px var(--amber-glow);
+}
+
+.btn-control:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  border-color: var(--red-alarm);
+  color: var(--red-alarm);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--red-alarm);
+  color: #fff;
+  box-shadow: 0 0 15px var(--red-glow);
+}
+
+/* Terminal & Dispatch Panels */
+.terminal-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.terminal-header {
+  background: #14171b;
+  border-bottom: 1px solid var(--border-dim);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+/* Uncanny Cursor drift class */
+.uncanny-pull {
+  transition: transform 0.4s ease-out;
+}
+
+/* Stamp Effect */
+.stamp {
+  border: 3px double var(--red-alarm);
+  color: var(--red-alarm);
+  font-weight: 800;
+  padding: 4px 10px;
+  text-transform: uppercase;
+  transform: rotate(-4deg);
+  letter-spacing: 2px;
+  display: inline-block;
+  opacity: 0.85;
+}
+
+.stamp-ok {
+  border-color: var(--green-term);
+  color: var(--green-term);
+}
