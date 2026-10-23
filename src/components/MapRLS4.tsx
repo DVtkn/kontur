@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ShieldAlert, AlertTriangle, Eye, Database, Terminal, CheckCircle2, Snowflake, ArrowLeft, Send } from 'lucide-react';
+import { ObjectiveBanner } from './ObjectiveBanner';
 import { sound } from '../audio/soundEngine';
 
 interface MapRLS4Props {
   onComplete: (code: string) => void;
   onBack: () => void;
   alreadySolved: boolean;
+  onOpenHints?: () => void;
 }
 
-export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySolved }) => {
+export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySolved, onOpenHints }) => {
   // Tabs: 'cctv' | 'database' | 'power'
   const [activeTab, setActiveTab] = useState<'cctv' | 'database' | 'power'>('cctv');
 
@@ -37,6 +39,11 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
   const [freezeCodeInput, setFreezeCodeInput] = useState<string>('');
   const [isFrozen, setIsFrozen] = useState<boolean>(alreadySolved);
   const [freezeError, setFreezeError] = useState<boolean>(false);
+  const [breached, setBreached] = useState<boolean>(false);
+
+  // 3D Physical Soviet toggle switches
+  const [doorPowerToggle, setDoorPowerToggle] = useState<boolean>(!alreadySolved);
+  const [cryoValveToggle, setCryoValveToggle] = useState<boolean>(alreadySolved);
 
   // Play alarm once on entry if not solved
   useEffect(() => {
@@ -48,6 +55,9 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
   // IR slider effect: check thresholds
   const handleIrChange = (val: number) => {
     setIrSensitivity(val);
+    if (val % 12 === 0) {
+      sound.playStatic(0.04, 0.012);
+    }
     if (val >= 45 && !codeFoundOnWall) {
       setCodeFoundOnWall(true);
       sound.playBeep(940, 0.05);
@@ -75,7 +85,8 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
   const handleDbSearch = (e: React.FormEvent) => {
     e.preventDefault();
     sound.playKeypress();
-    if (dbSearch.trim() === '714') {
+    const q = dbSearch.trim().toLowerCase();
+    if (q === '714' || q.includes('соколов') || q.includes('sokolov')) {
       setDbResultFound(true);
       sound.playScreamerThud();
       sound.playGlitch();
@@ -103,13 +114,15 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
 
   // Climax timer loop
   useEffect(() => {
-    if (!climaxStarted || isFrozen) return;
+    if (!climaxStarted || isFrozen || breached) return;
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          // Auto breach failure simulation
+          setBreached(true);
+          sound.playScreamerThud();
+          sound.playAlarm(3);
           return 0;
         }
         return prev - 1;
@@ -119,35 +132,60 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [climaxStarted, isFrozen]);
+  }, [climaxStarted, isFrozen, breached]);
 
   // Execute Freeze
   const handleExecuteFreeze = () => {
     sound.playClick();
     if (freezeCodeInput.trim() === '714') {
       setIsFrozen(true);
-      sound.playStatic(0.8, 0.08);
+      setBreached(false);
+      sound.triggerHaptic('success');
+      sound.playCryoHiss(2.5);
       sound.playBeep(600, 0.3);
       onComplete('19');
     } else {
+      sound.triggerHaptic('error');
       sound.playAlarm(2);
       setFreezeError(true);
       setTimeout(() => setFreezeError(false), 2000);
     }
   };
 
+  const handleResetBreach = () => {
+    sound.playClick();
+    sound.triggerHaptic('warning');
+    sound.playAlarm(1);
+    setBreached(false);
+    setTimeLeft(25);
+    setLockIntegrity(65);
+    setActiveTab('power');
+  };
+
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       
+      {/* Citycode Objective & Quest Banner */}
+      <ObjectiveBanner
+        step="ТОМ I // СПЕЦОБЪЕКТ «РЛС-4»"
+        title={
+          isFrozen
+            ? "Утечка шлюза В-2 купирована криогеном. Код сектора: [ 19 ]"
+            : "Включите ИК-подсветку камеры, проверьте номер жетона в базе кадров и предотвратите взлом двери"
+        }
+        isSolved={isFrozen}
+        onOpenHints={onOpenHints || (() => {})}
+      />
+
       {/* Top Bar with Status and Tabs */}
       <div className="terminal-card" style={{ padding: '12px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--amber)', letterSpacing: '1px' }}>
-              КАРТА 1: ОБЪЕКТ РЛС-4 // ГЕРМОШЛЮЗ В-2
+              ДЕЛО № 14-В // СПЕЦОБЪЕКТ «РЛС-4» (ГЕРМОШЛЮЗ В-2)
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Статус: {isFrozen ? 'УТЕЧКА КУПИРОВАНА (СЕКТОР ВЫВЕДЕН В КРИО-РЕЖИМ)' : 'КРИТИЧЕСКИЙ СБОЙ ИЗОЛЯЦИИ'}
+              Режим: {isFrozen ? 'КОНТУР ИЗОЛИРОВАН (КРИОГЕННАЯ КОНСЕРВАЦИЯ АКТИВНА)' : 'ЧРЕЗВЫЧАЙНАЯ СИТУАЦИЯ // СРЫВ БИОЛОГИЧЕСКОГО ПЕРИМЕТРА'}
             </div>
           </div>
 
@@ -218,33 +256,37 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
       </div>
 
       {/* Main Content Area: Left panel (Camera/DB/Power) + Right panel (Pager) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '16px' }}>
+      <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '16px' }}>
         
         {/* LEFT TAB CONTENT */}
-        <div className="terminal-card" style={{ minHeight: '440px', display: 'flex', flexDirection: 'column' }}>
+        <div className="terminal-card bunker-chassis" style={{ minHeight: '440px', display: 'flex', flexDirection: 'column' }}>
+          <div className="bunker-rivet tl" />
+          <div className="bunker-rivet tr" />
+          <div className="bunker-rivet bl" />
+          <div className="bunker-rivet br" />
           
           {/* TAB 1: CCTV CAMERA 144p */}
           {activeTab === 'cctv' && (
-            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>КАМЕРА: [КАМ-В2-ВНУТР] // 144p 10fps</span>
+            <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '0 4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '1px' }}>ВИДЕОСИГНАЛ: [КАМ-В2-ВНУТР] // 144p 10fps</span>
                 <span style={{ fontSize: '11px', color: 'var(--red-alarm)', fontWeight: 'bold' }}>● REC [02:14:48]</span>
               </div>
 
-              {/* 144p Monitor Viewport */}
+              {/* 144p Monitor Viewport with authentic CRT Bezel & Curved Glass Glare */}
               <div
+                className="crt-bezel"
                 style={{
                   position: 'relative',
                   width: '100%',
                   height: '290px',
                   background: isFrozen ? '#1c2e3d' : '#050607',
-                  border: '2px solid var(--border-light)',
-                  overflow: 'hidden',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
+                <div className="crt-glass-glare" />
                 {/* Scanlines & Noise Texture */}
                 <div
                   style={{
@@ -440,8 +482,8 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
               </div>
 
               {codeFoundOnWall && !isFrozen && (
-                <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--amber)' }}>
-                  💡 <span style={{ fontWeight: 700 }}>Улика:</span> На бетонной стене за спинами людей мелом выведено число <strong>714</strong>. Проверьте его в Базе персонала!
+                <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--amber)', background: 'rgba(255, 180, 34, 0.08)', padding: '8px 12px', borderLeft: '3px solid var(--amber)' }}>
+                  <span style={{ fontWeight: 800 }}>ОПТИЧЕСКАЯ ФИКСАЦИЯ:</span> На тыльной бетонной переборке шлюза проявился нанесенный мелом трехзначный шифр табельного учета: <strong>714</strong>.
                 </div>
               )}
             </div>
@@ -460,7 +502,7 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
               <form onSubmit={handleDbSearch} style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
                 <input
                   type="text"
-                  placeholder="Табельный номер (например, 714)..."
+                  placeholder="Введите табельный номер или фамилию сотрудника..."
                   value={dbSearch}
                   onChange={(e) => setDbSearch(e.target.value)}
                   style={{
@@ -489,7 +531,7 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-dim)', paddingBottom: '8px', marginBottom: '10px' }}>
                     <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>ДОСЬЕ СОТРУДНИКА #714</span>
-                    <span className="stamp" style={{ fontSize: '11px' }}>ЛЕТАЛЬНЫЙ СТАТУС</span>
+                    <span className="rubber-stamp-classified" style={{ fontSize: '11px' }}>ЛЕТАЛЬНЫЙ СТАТУС</span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '6px', fontSize: '12px' }}>
@@ -506,8 +548,20 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
                     <span style={{ color: 'var(--red-alarm)', fontWeight: 800 }}>ВНУТРИ ШЛЮЗА В-2 (У ЛИНЗЫ КАМЕРЫ)</span>
                   </div>
 
-                  <div style={{ marginTop: '14px', background: 'rgba(255, 65, 54, 0.12)', padding: '10px', borderLeft: '3px solid var(--red-alarm)', fontSize: '12px', color: '#ffbaba' }}>
-                    ⚠️ <strong>ВЫВОД ОПЕРАТОРА:</strong> Настоящий Соколов мертв и находится внутри шлюза (12-е тело у камеры). Существо, пишущее в пейджер снаружи — это мимикрирующая аномалия, которая пытается обманом заставить дежурного открыть дверь!
+                  {/* Animated ECG Flatline Monitor */}
+                  <div style={{ background: '#05070a', border: '1px solid #232a35', borderRadius: '4px', padding: '10px', marginTop: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--red-alarm)', marginBottom: '4px', fontWeight: 700 }}>
+                      <span>ОСЦИЛЛОГРАФ БИО-ДАТЧИКА #714</span>
+                      <span>ЧСС: 0 BPM [АСИСТОЛИЯ]</span>
+                    </div>
+                    <svg width="100%" height="32" style={{ background: '#030507', border: '1px solid #1a202c', display: 'block' }}>
+                      <line x1="0" y1="16" x2="100%" y2="16" stroke="var(--red-alarm)" strokeWidth="2" strokeDasharray="6 3" />
+                    </svg>
+                  </div>
+
+                  <div style={{ marginTop: '14px', background: 'rgba(255, 65, 54, 0.12)', padding: '12px', borderLeft: '3px solid var(--red-alarm)', fontSize: '12px', color: '#ffbaba', lineHeight: 1.5 }}>
+                    <strong>ЗАКЛЮЧЕНИЕ СУДЕБНО-МЕДИЦИНСКОЙ ЭКСПЕРТИЗЫ:</strong><br />
+                    Биометрические показатели тела у линзы камеры свидетельствуют о биологической смерти дежурного. Источник сигнала пейджера физически находится СНАРУЖИ гермошлюза В-2 и имитирует речь погибшего техника с целью принудительного снятия электронного замка.
                   </div>
                 </div>
               ) : (
@@ -546,40 +600,89 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
                   </button>
                 </div>
               ) : (
-                <div style={{ background: '#0d0f12', border: '1px solid var(--border-light)', padding: '16px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--red-alarm)', fontWeight: 800, marginBottom: '8px' }}>
-                    ВНИМАНИЕ: ПЕРЕКЛЮЧЕНИЕ ПИТАНИЯ С ДВЕРИ НА ХЛАДАГЕНТ
+                <div style={{ background: '#0d0f12', border: '1px solid var(--border-light)', padding: '16px', borderRadius: '6px' }}>
+                  
+                  {/* Physical 3D Soviet Toggle Switches */}
+                  <div style={{ marginBottom: '18px' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '1px', marginBottom: '10px', textTransform: 'uppercase' }}>
+                      МЕХАНИЧЕСКИЕ ТУМБЛЕРЫ КОНТУРА БЕЗОПАСНОСТИ:
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                      {/* Toggle 1: Door Lock Power */}
+                      <div
+                        className="toggle-switch-3d"
+                        onClick={() => {
+                          const nextVal = !doorPowerToggle;
+                          setDoorPowerToggle(nextVal);
+                          sound.playHeavyToggle(nextVal);
+                          sound.triggerHaptic('tap');
+                        }}
+                      >
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#c9d1d9' }}>ПИТАНИЕ ЗАМКА</div>
+                        <div className="toggle-mount-plate">
+                          <div className={`toggle-lever ${doorPowerToggle ? 'up' : 'down'}`} />
+                        </div>
+                        <div className={`pilot-lamp ${doorPowerToggle ? 'green-on' : 'off'}`} />
+                        <div style={{ fontSize: '9px', color: doorPowerToggle ? 'var(--green-term)' : 'var(--text-dim)', fontWeight: 700 }}>
+                          {doorPowerToggle ? 'ПОДАНО (ВКЛ)' : 'СНЯТО (ОТКЛ)'}
+                        </div>
+                      </div>
+
+                      {/* Toggle 2: Cryo Valve */}
+                      <div
+                        className="toggle-switch-3d"
+                        onClick={() => {
+                          const nextVal = !cryoValveToggle;
+                          setCryoValveToggle(nextVal);
+                          sound.playHeavyToggle(nextVal);
+                          sound.triggerHaptic('tap');
+                        }}
+                      >
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#c9d1d9' }}>КРИО-МАГИСТРАЛЬ</div>
+                        <div className="toggle-mount-plate">
+                          <div className={`toggle-lever ${cryoValveToggle ? 'up' : 'down'}`} />
+                        </div>
+                        <div className={`pilot-lamp ${cryoValveToggle ? 'red-on' : 'off'}`} />
+                        <div style={{ fontSize: '9px', color: cryoValveToggle ? 'var(--red-alarm)' : 'var(--text-dim)', fontWeight: 700 }}>
+                          {cryoValveToggle ? 'ВЗВЕДЕН (ГОТОВ)' : 'ПЕРЕКРЫТ'}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '320px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      ТАБЕЛЬНЫЙ КОД ПОДТВЕРЖДЕНИЯ (СО СТЕНЫ):
+                  {/* Freeze Code Form */}
+                  <form onSubmit={(e) => { e.preventDefault(); handleExecuteFreeze(); }} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '340px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--amber)', fontWeight: 600 }}>
+                      ТАБЕЛЬНЫЙ КОД ПОДТВЕРЖДЕНИЯ ДЕЖУРНОГО (СО СТЕНЫ):
                     </label>
                     <input
                       type="text"
                       maxLength={4}
-                      placeholder="Код (например, 714)"
+                      placeholder="Табельный шифр (например, 714)..."
                       value={freezeCodeInput}
                       onChange={(e) => setFreezeCodeInput(e.target.value)}
                       style={{
                         background: '#07080a',
                         border: freezeError ? '1px solid var(--red-alarm)' : '1px solid var(--border-light)',
                         color: 'var(--amber)',
-                        padding: '8px',
-                        fontSize: '16px',
+                        padding: '10px',
+                        fontSize: '17px',
                         fontWeight: 700,
                         textAlign: 'center',
                         fontFamily: 'inherit',
+                        letterSpacing: '2px',
+                        borderRadius: '4px',
                       }}
                     />
                     <button
+                      type="submit"
                       className="btn-control btn-danger"
-                      onClick={handleExecuteFreeze}
-                      style={{ padding: '10px', justifyContent: 'center' }}
+                      style={{ padding: '12px', justifyContent: 'center', fontSize: '13px' }}
                     >
                       <Snowflake size={16} /> АКТИВИРОВАТЬ ЭКСТРЕННУЮ ЗАМОРОЗКУ
                     </button>
-                  </div>
+                  </form>
                 </div>
               )}
             </div>
@@ -596,9 +699,24 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
           </div>
 
           {/* Climax Alert Banner */}
-          {climaxStarted && !isFrozen && (
+          {climaxStarted && !isFrozen && !breached && (
             <div style={{ background: 'var(--red-alarm)', color: '#fff', padding: '6px 12px', fontSize: '11px', fontWeight: 800, textAlign: 'center', animation: 'flicker 0.4s infinite' }}>
               ⚠️ СУЩЕСТВО ЛОМАЕТ ВНЕШНИЙ ЗАМОК ШЛЮЗА! ОСТАЛОСЬ: {timeLeft} сек!
+            </div>
+          )}
+
+          {breached && !isFrozen && (
+            <div style={{ background: '#380a0a', border: '2px solid var(--red-alarm)', padding: '10px', textAlign: 'center', margin: '8px' }}>
+              <div style={{ color: 'var(--red-alarm)', fontWeight: 800, fontSize: '12px', marginBottom: '6px' }}>
+                🚨 ВНИМАНИЕ: ЗАМОК СОРВАН! СУЩЕСТВО ПРОРВАЛОСЬ В КОРИДОР!
+              </div>
+              <button
+                className="btn-control btn-danger"
+                onClick={handleResetBreach}
+                style={{ fontSize: '11px', padding: '6px 12px' }}
+              >
+                ПЕРЕЗАПУСТИТЬ АВАРИЙНЫЙ КОНТУР (КОД 714)
+              </button>
             </div>
           )}
 
@@ -629,7 +747,7 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
           <div style={{ padding: '10px', background: '#0a0c0f', borderTop: '1px solid var(--border-dim)' }}>
             {!climaxStarted ? (
               <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Изучите камеру и пробейте номер со стены в базе данных.
+                СЛУЖЕБНЫЙ РЕГЛАМЕНТ: При нарушении био-периметра сверьте показания телеметрии личного жетона дежурного в базе кадров.
               </div>
             ) : (
               <button
@@ -640,7 +758,7 @@ export const MapRLS4: React.FC<MapRLS4Props> = ({ onComplete, onBack, alreadySol
                   setActiveTab('power');
                 }}
               >
-                <Snowflake size={14} /> ПЕРЕЙТИ К ЗАМОРОЗКЕ (КОД 714)
+                <Snowflake size={14} /> ПЕРЕЙТИ К АВАРИЙНОЙ КРИО-КОНСЕРВАЦИИ
               </button>
             )}
           </div>

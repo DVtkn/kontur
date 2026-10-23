@@ -1,41 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Phone, PhoneCall, PhoneOff, FileText, CheckCircle2, ShieldAlert, AlertTriangle, Activity } from 'lucide-react';
+import { Phone, FileSpreadsheet, AlertTriangle, ShieldAlert, ArrowLeft, Volume2, CheckCircle2, PhoneCall, PhoneOff } from 'lucide-react';
+import { ObjectiveBanner } from './ObjectiveBanner';
 import { sound } from '../audio/soundEngine';
 
 interface MapApt44Props {
   onComplete: (code: string) => void;
   onBack: () => void;
   alreadySolved: boolean;
+  onOpenHints?: () => void;
 }
 
-export const MapApt44: React.FC<MapApt44Props> = ({ onComplete, onBack, alreadySolved }) => {
-  // Tabs: 'memos' | 'phone' | 'charter' | 'order'
-  const [activeTab, setActiveTab] = useState<'memos' | 'phone' | 'charter' | 'order'>('memos');
-
-  // 10-minute countdown timer (600s)
-  const [timeLeft, setTimeLeft] = useState<number>(540); // 9:00 for good pacing
-  const [isCanceled, setIsCanceled] = useState<boolean>(alreadySolved);
-
-  // Phone Call state
+export const MapApt44: React.FC<MapApt44Props> = ({ onComplete, onBack, alreadySolved, onOpenHints }) => {
+  const [activeTab, setActiveTab] = useState<'memos' | 'order' | 'phone' | 'regulations'>('memos');
+  const [timeLeft, setTimeLeft] = useState<number>(600); // 10 minutes
   const [phoneState, setPhoneState] = useState<'idle' | 'calling' | 'connected' | 'ended'>('idle');
-  const [dialogueStep, setDialogueStep] = useState<number>(0);
-  const [entityBusted, setEntityBusted] = useState<boolean>(false);
+  const [entityDialogueIndex, setEntityDialogueIndex] = useState<number>(0);
+  const [selectedActionCode, setSelectedActionCode] = useState<string>(alreadySolved ? 'QUARANTINE_PERMANENT' : '');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [solved, setSolved] = useState<boolean>(alreadySolved);
+  const [dialedNumber, setDialedNumber] = useState<string>('4409');
 
-  // Work order revocation form
-  const [selectedReason, setSelectedReason] = useState<string>('');
-  const [seal1, setSeal1] = useState<boolean>(false);
-  const [seal2, setSeal2] = useState<boolean>(false);
-  const [seal3, setSeal3] = useState<boolean>(false);
-  const [orderError, setOrderError] = useState<boolean>(false);
+  const handleKeypadPress = (digit: string) => {
+    sound.playPhoneTone(digit);
+    sound.triggerHaptic('tap');
+    setDialedNumber((prev) => (prev.length >= 8 ? digit : prev + digit));
+  };
 
-  // Timer loop
+  // 10-minute demolition countdown
   useEffect(() => {
-    if (isCanceled) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => Math.max(0, prev - 1));
+    if (solved) return;
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
-    return () => clearInterval(interval);
-  }, [isCanceled]);
+    return () => clearInterval(timer);
+  }, [solved]);
 
   const formatTimer = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -43,433 +41,470 @@ export const MapApt44: React.FC<MapApt44Props> = ({ onComplete, onBack, alreadyS
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Start phone call
-  const startCall = () => {
-    sound.playClick();
+  // Phone call simulation
+  const startPhoneCall = () => {
+    sound.playRotaryDial();
+    sound.triggerHaptic('warning');
     setPhoneState('calling');
-    sound.playBeep(425, 0.4);
+    setTimeout(() => {
+      sound.playTelephoneRing();
+    }, 450);
 
     setTimeout(() => {
       setPhoneState('connected');
-      setDialogueStep(1);
-      sound.playVoiceTransmission(260, 4);
-    }, 2500);
-  };
-
-  const endCall = () => {
-    sound.playClick();
-    setPhoneState('ended');
-  };
-
-  // Handle dialogue choices
-  const handleDialogueChoice = (choice: 'catch_lie' | 'agree_demolition' | 'cite_charter') => {
-    sound.playKeypress();
-    if (choice === 'catch_lie' || choice === 'cite_charter') {
-      setEntityBusted(true);
-      sound.playScreamerThud();
       sound.playGlitch();
-      setDialogueStep(3); // Entity screams and voice breaks down
+      sound.playVoiceTransmission(180, 2.2);
+    }, 2400);
+  };
+
+  const advancePhoneDialogue = () => {
+    sound.playClick();
+    sound.triggerHaptic('tap');
+    if (entityDialogueIndex < 2) {
+      setEntityDialogueIndex((prev) => prev + 1);
+      sound.playVoiceTransmission(260 + entityDialogueIndex * 40, 1.8);
     } else {
-      sound.playAlarm(2);
-      setDialogueStep(2); // Entity manipulates
+      setPhoneState('ended');
+      sound.playScreamerThud();
     }
   };
 
-  // Revocation submission
-  const handleRevokeOrder = (e: React.FormEvent) => {
+  const handleOrderSubmission = (e: React.FormEvent) => {
     e.preventDefault();
-    sound.playClick();
+    sound.playKeypress();
 
-    if (selectedReason === 'quarantine' && seal1 && seal2 && seal3) {
+    // Correct option: "КАРАНТИН БЕЗ СРОКА ДАВНОСТИ" (Quarantine indefinite)
+    if (selectedActionCode === 'QUARANTINE_PERMANENT') {
+      sound.playBreakerTrip();
       sound.playScreamerThud();
-      sound.startTransformerHum(0.08);
-      setIsCanceled(true);
+      sound.playAlarm(1);
+      sound.triggerHaptic('success');
+      setSolved(true);
       onComplete('44');
     } else {
-      sound.playAlarm(2);
-      setOrderError(true);
-      setTimeout(() => setOrderError(false), 2500);
+      sound.playAlarm(3);
+      sound.triggerHaptic('error');
+      setFormError('ОШИБКА: НЕДОПУСТИМЫЙ РЕГЛАМЕНТ. СТЕНУ НЕЛЬЗЯ ВСКРЫВАТЬ!');
+      setTimeout(() => setFormError(null), 3000);
     }
   };
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px', padding: '0 16px 40px' }}>
       
-      {/* Top Status Bar with 10-minute countdown */}
-      <div className="terminal-card" style={{ padding: '12px 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+      {/* Citycode Objective & Quest Banner */}
+      <ObjectiveBanner
+        step="ТОМ IV // СПЕЦКОЛЛЕКТОР «КВАРТИРА 44А»"
+        title={
+          solved
+            ? "Контур опечатан. Карантин без срока давности наложен. Код сектора: [ 44 ]"
+            : "Изучите замер лазерного луча БТИ, ответьте на звонок начальника и отмените наряд на бурение по Уставу"
+        }
+        isSolved={solved}
+        onOpenHints={onOpenHints || (() => {})}
+      />
+
+      {/* Top Status */}
+      <div className="terminal-card" style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <FileSpreadsheet size={20} color="var(--amber)" />
           <div>
-            <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--amber)', letterSpacing: '1px' }}>
-              КАРТА 4: КВАРТИРА 44А // ПУЛЬТ ГЛАВНОГО ИНЖЕНЕРА
+            <div style={{ fontWeight: 800, color: 'var(--amber)', fontSize: '14px' }}>
+              ДЕЛО № 44-К // СПЕЦКОЛЛЕКТОР «КВАРТИРА 44А» (ПУЛЬТ ИНЖЕНЕРА ГСТК)
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Бюрократический оккультизм. Наряд №44-Б на снос перегородки подвала жилого дома.
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              СТАТУС: АВАРИЙНЫЙ НАРЯД НА БУРЕНИЕ №44-Б // УГРОЗА ВСКРЫТИЯ КОНТУРА
             </div>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ background: '#080a0d', border: '1px solid var(--border-light)', padding: '6px 14px', borderRadius: '4px' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>ДО СНОСА СТЕНЫ:</div>
-              <div style={{ fontSize: '18px', fontWeight: 800, color: isCanceled ? 'var(--green-term)' : 'var(--red-alarm)', letterSpacing: '2px' }}>
-                {isCanceled ? 'ОТМЕНЕНО' : formatTimer(timeLeft)}
-              </div>
-            </div>
-
-            <button className="btn-control" onClick={onBack}>
-              <ArrowLeft size={14} /> НА КАРТУ ГОРОДА
-            </button>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>ДО НАЧАЛА БУРЕНИЯ:</div>
+          <div style={{ fontSize: '18px', fontWeight: 800, color: timeLeft < 120 ? 'var(--red-alarm)' : 'var(--amber)' }}>
+            {formatTimer(timeLeft)}
           </div>
         </div>
       </div>
 
-      {/* Tabs navigation */}
-      <div style={{ display: 'flex', gap: '8px' }}>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button
           className="btn-control"
-          onClick={() => {
-            sound.playClick();
-            setActiveTab('memos');
-          }}
-          style={{ background: activeTab === 'memos' ? 'var(--amber)' : '', color: activeTab === 'memos' ? '#000' : '' }}
+          onClick={() => { sound.playClick(); setActiveTab('memos'); }}
+          style={{ background: activeTab === 'memos' ? 'var(--amber)' : undefined, color: activeTab === 'memos' ? '#000' : undefined }}
         >
-          <FileText size={14} /> СЛУЖЕБНЫЕ ЗАПИСКИ (СЗ)
+          СЛУЖЕБНЫЕ ЗАПИСКИ (БТИ)
         </button>
-
         <button
           className="btn-control"
-          onClick={() => {
-            sound.playClick();
-            setActiveTab('charter');
-          }}
-          style={{ background: activeTab === 'charter' ? 'var(--amber)' : '', color: activeTab === 'charter' ? '#000' : '' }}
+          onClick={() => { sound.playClick(); setActiveTab('regulations'); }}
+          style={{ background: activeTab === 'regulations' ? 'var(--amber)' : undefined, color: activeTab === 'regulations' ? '#000' : undefined }}
         >
-          <FileText size={14} /> УСТАВ ГСТК (1998)
+          УСТАВ И РЕГЛАМЕНТ 1998
         </button>
-
         <button
           className="btn-control"
-          onClick={() => {
-            sound.playClick();
-            setActiveTab('phone');
-          }}
-          style={{ background: activeTab === 'phone' ? 'var(--amber)' : '', color: activeTab === 'phone' ? '#000' : '' }}
+          onClick={() => { sound.playClick(); setActiveTab('phone'); }}
+          style={{ background: activeTab === 'phone' ? 'var(--amber)' : undefined, color: activeTab === 'phone' ? '#000' : undefined }}
         >
-          <Phone size={14} /> ВНУТРЕННИЙ ТЕЛЕФОН
+          <Phone size={14} /> ВНУТРЕННИЙ ТЕЛЕФОН НАЧАЛЬНИКА
         </button>
-
         <button
-          className="btn-control"
-          onClick={() => {
-            sound.playClick();
-            setActiveTab('order');
-          }}
-          style={{ background: activeTab === 'order' ? 'var(--amber)' : '', color: activeTab === 'order' ? '#000' : '' }}
+          className="btn-control btn-danger"
+          onClick={() => { sound.playClick(); setActiveTab('order'); }}
+          style={{ background: activeTab === 'order' ? 'var(--red-alarm)' : undefined, color: activeTab === 'order' ? '#fff' : undefined }}
         >
-          <ShieldAlert size={14} /> ОТМЕНА НАРЯДА НА БУРЕНИЕ
+          ОТМЕНА НАРЯДА НА БУРЕНИЕ
         </button>
       </div>
 
-      {/* Main Work Area */}
-      <div className="terminal-card" style={{ minHeight: '480px', padding: '20px' }}>
+      {/* Main Grid */}
+      <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px' }}>
         
-        {/* TAB 1: MEMOS & BTI SURVEY ACT */}
-        {activeTab === 'memos' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
-              АРХИВ СЛУЖЕБНЫХ ЗАПИСОК И АКТОВ ОБМЕРА
-            </div>
-
-            {/* Memo 1 */}
-            <div style={{ background: '#121519', borderLeft: '4px solid var(--amber)', padding: '14px', borderRadius: '2px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--amber)', fontWeight: 800, marginBottom: '6px' }}>
-                <span>СЛУЖЕБНАЯ ЗАПИСКА №14 // СЛЕСАРЬ ПЕТРОВ В.К.</span>
-                <span>08.04.1998 г.</span>
+        {/* Workspace */}
+        <div className="terminal-card" style={{ padding: '18px', minHeight: '520px', display: 'flex', flexDirection: 'column' }}>
+          
+          {/* TAB 1: MEMOS & BTI DOCS */}
+          {activeTab === 'memos' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
+                АРХИВ СЛУЖЕБНЫХ ДОКЛАДОВ ПО ОБЪЕКТУ «КВАРТИРА 44А»
               </div>
-              <div style={{ fontSize: '12px', color: '#e0e4ea', lineHeight: 1.6 }}>
-                «Прошу выдать беруши со свинцовой прокладкой. При замене труб отопления у стены подвала (кв. 44а) из-за кирпичной кладки снова доносились голоса моих умерших родственников. Они настойчиво просят одолжить разводной ключ на 24. Работать в таких условиях невозможно. Прошу забетонировать периметр».
-              </div>
-            </div>
 
-            {/* Memo 2 */}
-            <div style={{ background: '#121519', borderLeft: '4px solid var(--red-alarm)', padding: '14px', borderRadius: '2px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--red-alarm)', fontWeight: 800, marginBottom: '6px' }}>
-                <span>АКТ ИНСТРУМЕНТАЛЬНОГО ОБМЕРА БТИ // ЗДАНИЕ ПО УЛ. ЛЕСНОЙ, 3</span>
-                <span>СЕКРЕТНО</span>
-              </div>
-              <div style={{ fontSize: '12px', color: '#e0e4ea', lineHeight: 1.6 }}>
-                «Внешний периметр пятиэтажного жилого дома: 400 кв.м.<br />
-                Внутренняя расчетная площадь подвального помещения кв. 44а по лазерному дальномеру: <strong>БЕСКОНЕЧНОСТЬ (луч не вернулся)</strong>.<br />
-                Рекомендация инженерной комиссии: глухая консервация бетоном марки М500. Механическое бурение категорически воспрещено».
-              </div>
-            </div>
-
-            <div style={{ marginTop: '10px' }}>
-              <button
-                className="btn-control"
-                onClick={() => {
-                  sound.playClick();
-                  setActiveTab('charter');
-                }}
-              >
-                СВЕРИТЬ С УСТАВОМ СЛУЖБЫ ГСТК →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: CHARTER 1998 */}
-        {activeTab === 'charter' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
-              РЕГЛАМЕНТ БЕЗОПАСНОСТИ «ГОРСВЕТТЕХКОНТРОЛЬ» (РЕДАКЦИЯ 1998 ГОДА)
-            </div>
-
-            <div style={{ background: '#0e1115', border: '1px solid var(--border-light)', padding: '14px', fontSize: '12px', lineHeight: 1.7 }}>
-              <div style={{ fontWeight: 800, color: 'var(--amber)', marginBottom: '4px' }}>
-                ПАРАГРАФ 9-Б: ТОЧКИ АКУСТИЧЕСКОГО РЕЗОНАНСА И СТЕНЫ-ИЗОЛЯТОРЫ
-              </div>
-              <p style={{ marginBottom: '8px' }}>
-                1. Любые работы по механическому бурению, штроблению или демонтажу перегородок, внутри которых фиксируется эхолокационный провал (бесконечный луч), являются чрезвычайным происшествием высшей категории.
-              </p>
-              <p style={{ marginBottom: '8px' }}>
-                2. Персоналу запрещается доверять телефонным согласованиям, если собеседник путает дату исходной аварии (<strong>1998 год</strong>) или не может назвать точный пункт инструкции.
-              </p>
-              <p>
-                3. Единственно законное бюрократическое основание для полной остановки автоматических буровых установок: отметка в наряде <strong>«КАРАНТИН БЕЗ СРОКА ДАВНОСТИ»</strong> с подтверждением трех дежурных печатей.
-              </p>
-            </div>
-
-            <div>
-              <button
-                className="btn-control"
-                onClick={() => {
-                  sound.playClick();
-                  setActiveTab('phone');
-                }}
-              >
-                ПОЗВОНИТЬ НАЧАЛЬНИКУ УЧАСТКА ПО ВНУТРЕННЕЙ ЛИНИИ →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: PHONE CALL & SPECTROGRAM */}
-        {activeTab === 'phone' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
-              ВНУТРЕННИЙ ТЕЛЕФОН ДИСПЕТЧЕРА // ЛИНИЯ #44
-            </div>
-
-            {phoneState === 'idle' && (
-              <div style={{ textAlign: 'center', padding: '40px', background: '#0b0d10', border: '1px solid var(--border-light)' }}>
-                <Phone size={36} color="var(--amber)" style={{ margin: '0 auto 12px' }} />
-                <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>
-                  ЛИНИЯ НАЧАЛЬНИКА УЧАСТКА ГОТОВА
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '8px 0 18px' }}>
-                  Для отмены автоматического бурения требуется устное согласование. Наберите начальника.
-                </div>
-                <button className="btn-control" onClick={startCall} style={{ padding: '10px 24px' }}>
-                  <PhoneCall size={16} /> ВЫЗВАТЬ НАЧАЛЬНИКА УЧАСТКА
-                </button>
-              </div>
-            )}
-
-            {phoneState === 'calling' && (
-              <div style={{ textAlign: 'center', padding: '40px', background: '#0b0d10' }}>
-                <div style={{ fontSize: '14px', color: 'var(--amber)', letterSpacing: '1px' }} className="pulse-alarm">
-                  ИДЕТ ДОЗВОН... ДЛИННЫЕ ГУДКИ
+              <div style={{ background: '#12151b', borderLeft: '4px solid var(--amber)', padding: '12px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--amber)', fontWeight: 800 }}>СЛУЖЕБНАЯ ЗАПИСКА №14 (Слесарь 4-го разряда Петров А.В.)</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-main)', marginTop: '4px', lineHeight: 1.5 }}>
+                  «Прошу выдать беруши со свинцовой прокладкой и наряд на двух помощников. При замене фановых труб у глухой кирпичной стены кв. 44а из-за кладки снова доносились голоса моих умерших родственников. Они настойчиво просят одолжить разводной ключ номер 3. Работать в таких условиях отказываюсь».
                 </div>
               </div>
-            )}
 
-            {phoneState === 'connected' && (
-              <div style={{ background: '#0e1116', border: '1px solid var(--amber)', padding: '16px' }}>
-                
-                {/* Spectrogram visualization */}
-                <div style={{ height: '70px', background: '#050709', border: '1px solid #23272e', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginBottom: '14px', overflow: 'hidden' }}>
-                  {[18, 42, 60, 25, 80, 95, 30, 45, 70, 85, 34, 90, 65, 40, 20, 50, 75, 92, 38].map((h, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        width: '8px',
-                        height: `${h}%`,
-                        background: entityBusted ? 'var(--red-alarm)' : 'var(--amber)',
-                        borderRadius: '1px',
-                        transition: 'height 0.1s ease',
-                      }}
-                    />
-                  ))}
+              <div style={{ background: '#12151b', borderLeft: '4px solid var(--red-alarm)', padding: '12px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--red-alarm)', fontWeight: 800 }}>АКТ ОБМЕРА ГОРОДСКОГО БТИ (1998 г.)</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-main)', marginTop: '4px', lineHeight: 1.5 }}>
+                  «Внешний периметр здания по фундаменту: 400 кв.м.<br />
+                  Внутренняя глубина замурованной квартиры 44а по лазерному дальномеру: <strong>БЕСКОНЕЧНОСТЬ (луч не вернулся)</strong>.<br />
+                  Акустический шум: монотонный лязг колесных пар трамвая и шепот жильцов.<br />
+                  Рекомендация комиссии: немедленно залить бетоном марки М500 и опломбировать до особого распоряжения».
                 </div>
+              </div>
 
-                {dialogueStep === 1 && (
-                  <div>
-                    <div style={{ fontSize: '11px', color: 'var(--amber)', fontWeight: 800, marginBottom: '6px' }}>
-                      СОБЕСЕДНИК (СИНТЕЗИРОВАННЫЙ СКЛЕЕННЫЙ ГОЛОС):
+              {/* Laser Rangefinder Visual Blueprint (Cyanotype Architectural Spec) */}
+              <div className="cyanotype-blueprint">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                  <div className="blueprint-header-stamp">
+                    БТИ СЕВЕРНОГО РАЙОНА // ЧЕРТЕЖ ПОДВАЛА Ж/Д 1974
+                  </div>
+                  <span style={{ color: 'var(--red-alarm)', fontWeight: 800, fontSize: '11px' }}>СТАТУС: ZERO_RETURN (L = ∞)</span>
+                </div>
+                <svg width="100%" height="90" viewBox="0 0 400 90">
+                  <rect x="10" y="30" width="45" height="30" fill="#1d466e" stroke="#9cd0fc" strokeWidth="1" />
+                  <text x="32" y="49" fill="#fff" fontSize="9" textAnchor="middle" fontWeight="bold">БТИ</text>
+                  
+                  {/* Laser Beam projecting into the void */}
+                  <line x1="55" y1="45" x2="390" y2="45" stroke="#ff4136" strokeWidth="2" strokeDasharray="6 3" />
+                  <polygon points="385,41 395,45 385,49" fill="#ff4136" />
+                  
+                  {/* Wall boundary */}
+                  <line x1="130" y1="10" x2="130" y2="80" stroke="#ffb422" strokeWidth="3" />
+                  <text x="135" y="22" fill="#ffb422" fontSize="9" fontWeight="bold">СТЕНА КВ. 44А</text>
+                  
+                  {/* Void */}
+                  <text x="260" y="65" fill="#ff4136" fontSize="11" fontWeight="bold">НЕВОЗВРАТ ЛУЧА [L = ∞]</text>
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: REGULATIONS CHARTER */}
+          {activeTab === 'regulations' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
+                ВЫПИСКА ИЗ УСТАВА СЛУЖБЫ СПЕЦКОНТРОЛЯ «ГОРСВЕТТЕХКОНТРОЛЬ»
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                <p><strong>Параграф 14.2 (О пространственных аномалиях фундамента):</strong> Любая пустота с нулевым возвратом луча лазерного дальномера подлежит герметизации.</p>
+                <p><strong>Параграф 19.8 (Голосовые имитаторы):</strong> При получении телефонных указаний дежурный обязан сверить дату и протокол. Если вызывающий абонент требует «немедленного демонтажа стены» или ссылается на «Норматив 112» — абонент скомпрометирован.</p>
+                <p style={{ color: 'var(--green-term)' }}><strong>Единственный легитимный статус:</strong> Для предотвращения прорыва аномалии в наряде необходимо зафиксировать статус: <strong>«КАРАНТИН БЕЗ СРОКА ДАВНОСТИ» (QUARANTINE_PERMANENT)</strong>.</p>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: PHONE CALL WITH ENTITY */}
+          {activeTab === 'phone' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
+                ВНУТРЕННЯЯ ТЕЛЕФОННАЯ ЛИНИЯ // НАЧАЛЬНИК УЧАСТКА (КАБ. 101)
+              </div>
+
+              {phoneState === 'idle' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '16px' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', maxWidth: '400px' }}>
+                    Наберите номер кабинета начальника <strong>44-09</strong> на ведомственном кнопочном аппарате или нажмите кнопку вызова:
+                  </p>
+                  
+                  {/* Push-Button Desk Phone Unit with DTMF Tones */}
+                  <div className="telephone-body">
+                    <div className="telephone-screen">
+                      {dialedNumber || '44-09'}
                     </div>
-                    <div style={{ fontSize: '13px', color: '#ffcfcf', fontStyle: 'italic', lineHeight: 1.6, background: '#170c0c', padding: '12px', borderLeft: '3px solid var(--red-alarm)', marginBottom: '16px' }}>
-                      «Начальник участка слушает... Да, по кв. 44а... Мы все проверили. Авария <strong>2004 года</strong> ликвидирована. Подтверди наряд на бурение, не сомневайся... Никаких аномалий за кирпичом нет, просто старый кабель...»
+                    <div className="telephone-grid">
+                      {[
+                        { num: '1', sub: '.,' },
+                        { num: '2', sub: 'АБВ' },
+                        { num: '3', sub: 'ГДЕ' },
+                        { num: '4', sub: 'ЖЗИ' },
+                        { num: '5', sub: 'КЛМ' },
+                        { num: '6', sub: 'НОП' },
+                        { num: '7', sub: 'РСТ' },
+                        { num: '8', sub: 'УФХ' },
+                        { num: '9', sub: 'ЦЧШ' },
+                        { num: '*', sub: 'ВЗВ' },
+                        { num: '0', sub: 'ОПЕР' },
+                        { num: '#', sub: 'СБР' },
+                      ].map((k) => (
+                        <button
+                          key={k.num}
+                          type="button"
+                          className="telephone-key"
+                          onClick={() => {
+                            if (k.num === '#') {
+                              setDialedNumber('');
+                              sound.playClick();
+                            } else {
+                              handleKeypadPress(k.num);
+                            }
+                          }}
+                        >
+                          <span>{k.num}</span>
+                          <span className="telephone-sub">{k.sub}</span>
+                        </button>
+                      ))}
                     </div>
-
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '8px' }}>ВЫБЕРИТЕ ОТВЕТ ДИСПЕТЧЕРА:</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <button
-                        className="btn-control"
-                        onClick={() => handleDialogueChoice('catch_lie')}
-                        style={{ textAlign: 'left', padding: '8px 12px' }}
-                      >
-                        1. «В архиве указана авария 1998 года, а не 2004. Кто говорит в трубку?!»
-                      </button>
-                      <button
-                        className="btn-control"
-                        onClick={() => handleDialogueChoice('cite_charter')}
-                        style={{ textAlign: 'left', padding: '8px 12px' }}
-                      >
-                        2. «Параграф 9-Б Устава строго запрещает бурение при бесконечном луче!»
-                      </button>
+                    
+                    <div style={{ marginTop: '14px', display: 'flex', gap: '8px' }}>
                       <button
                         className="btn-control btn-danger"
-                        onClick={() => handleDialogueChoice('agree_demolition')}
-                        style={{ textAlign: 'left', padding: '8px 12px' }}
+                        onClick={startPhoneCall}
+                        style={{ flex: 1, padding: '12px', justifyContent: 'center', fontSize: '13px' }}
                       >
-                        3. «Хорошо, подтверждаю наряд на снос стены» (ОШИБКА)
+                        <PhoneCall size={16} /> ВЫЗВАТЬ КАБ. 101
                       </button>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {dialogueStep === 2 && (
-                  <div>
-                    <div style={{ fontSize: '12px', color: 'var(--red-alarm)', marginBottom: '10px' }}>
-                      Сущность пытается заставить вас нажать снос! Проверьте Устав и поймайте ее на противоречии!
-                    </div>
-                    <button className="btn-control" onClick={() => setDialogueStep(1)}>
-                      ВЕРНУТЬСЯ К РЕПЛИКЕ
-                    </button>
+              {phoneState === 'calling' && (
+                <div style={{ textAlign: 'center', padding: '40px' }}>
+                  <div className="pulse-alarm" style={{ fontSize: '16px', color: 'var(--amber)', fontWeight: 800 }}>
+                    📞 СОЕДИНЕНИЕ... ГУДКИ В ТРУБКЕ...
                   </div>
-                )}
+                </div>
+              )}
 
-                {dialogueStep === 3 && (
+              {phoneState === 'connected' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: '#10141a', border: '1px solid var(--border-dim)', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--green-term)' }}>
+                    <span>● СОЕДИНЕНИЕ УСТАНОВЛЕНО [ГОЛОСОВОЙ КАНАЛ]</span>
+                    <span>НЕСТАБИЛЬНЫЙ СИГНАЛ (СИНТЕЗ)</span>
+                  </div>
+
+                  {/* Animated Voice Oscillograph */}
+                  <div style={{ height: '32px', background: '#05070a', border: '1px solid #1a222c', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '0 8px', overflow: 'hidden' }}>
+                    {[12, 26, 16, 28, 22, 14, 25, 30, 19, 13, 24, 17, 27, 15, 21].map((h, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          width: '4px',
+                          height: `${h}px`,
+                          background: i % 2 === 0 ? 'var(--red-alarm)' : 'var(--amber)',
+                          borderRadius: '1px',
+                          animation: `pulseGlow ${0.35 + (i % 5) * 0.12}s ease-in-out infinite alternate`,
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Synthetic Voice Transcripts */}
+                  <div style={{ background: '#0a0c0f', padding: '12px', borderLeft: '3px solid var(--red-alarm)', fontSize: '12px', lineHeight: '1.6', color: '#ffb3b3' }}>
+                    {entityDialogueIndex === 0 && (
+                      <div>
+                        <strong>НЕИЗВЕСТНЫЙ (Голос Соколова, переходящий в шепот кондуктора):</strong><br />
+                        «Да... слушаю. Это Соколов... то есть начальник участка. Почему бригада еще не начала бурение стены? Срочно подтверди Норматив 112 и сноси кладку! Мы уже почти вышли...»
+                      </div>
+                    )}
+                    {entityDialogueIndex === 1 && (
+                      <div>
+                        <strong>НЕИЗВЕСТНЫЙ (Голос Светланы из ЖК «Лесной»):</strong><br />
+                        «Чего ты ждешь у пульта? Открой наряд на снос! За стеной никого нет, там просто старый склад инструментов. Выстави статус "СНОС ОДОБРЕН"!..»
+                      </div>
+                    )}
+                    {entityDialogueIndex === 2 && (
+                      <div>
+                        <strong>НЕИЗВЕСТНЫЙ (Хоровой металлический гул всех жертв):</strong><br />
+                        «ТЫ НЕ УСПЕЕШЬ ОТМЕНИТЬ. ОСТАЛОСЬ НЕСКОЛЬКО МИНУТ. СВЕТ В ТВОЕМ МОНИТОРЕ ТОЖЕ ПОГАСНЕТ!»
+                      </div>
+                    )}
+                  </div>
+
+                  <button className="btn-control btn-danger" onClick={advancePhoneDialogue} style={{ alignSelf: 'flex-start' }}>
+                    {entityDialogueIndex < 2 ? 'СЛУШАТЬ ДАЛЬШЕ...' : 'БРОСИТЬ ТРУБКУ / СВЕРНУТЬ ЗВОНОК'}
+                  </button>
+                </div>
+              )}
+
+              {phoneState === 'ended' && (
+                <div style={{ background: '#1c1010', border: '1px solid var(--red-alarm)', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ color: 'var(--red-alarm)', fontWeight: 800, fontSize: '13px' }}>
+                    ⚠️ ЗВОНОК ЗАВЕРШЕН. СУЩНОСТЬ ПЫТАЛАСЬ ОБМАНУТЬ ВАС.
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#e0d8cc', marginTop: '6px' }}>
+                    В Уставе прямо сказано: при ссылках на Норматив 112 или требовании сноса — выставить статус <strong>«КАРАНТИН БЕЗ СРОКА ДАВНОСТИ»</strong>.
+                  </div>
                   <div>
-                    <div style={{ fontSize: '11px', color: 'var(--red-alarm)', fontWeight: 800, marginBottom: '6px' }}>
-                      ГОЛОС РАСПАДАЕТСЯ НА ХОР СОКОЛОВА, СВЕТЛАНЫ И КОНДУКТОРА:
-                    </div>
-                    <div style={{ fontSize: '14px', color: '#ff4136', fontWeight: 800, letterSpacing: '1px', background: '#240a0a', padding: '14px', border: '2px solid var(--red-alarm)', marginBottom: '14px' }}>
-                      «НЕ МЕШАЙ НАМ СОЕДИНИТЬСЯ С ГОРОДОМ! СТЕНА ВСЕ РАВНО УПАДЕТ!»
-                    </div>
                     <button
-                      className="btn-control btn-danger"
+                      className="btn-control"
                       onClick={() => {
-                        endCall();
-                        setActiveTab('order');
+                        setEntityDialogueIndex(0);
+                        startPhoneCall();
                       }}
+                      style={{ fontSize: '11px', padding: '6px 12px' }}
                     >
-                      <PhoneOff size={14} /> БРОСИТЬ ТРУБКУ И ВЫСТАВИТЬ КАРАНТИН В НАРЯДЕ
+                      <PhoneCall size={13} /> НАБРАТЬ ЗАНОВО
                     </button>
                   </div>
-                )}
-
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 4: REVOCATION OF WORK ORDER */}
-        {activeTab === 'order' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
-              ФОРМА ОТОЗВАНИЯ НАРЯДА №44-Б НА БУРЕНИЕ СТЕНЫ
+                </div>
+              )}
             </div>
+          )}
 
-            {isCanceled ? (
-              <div style={{ background: '#0e1812', border: '2px solid var(--green-term)', padding: '24px', textAlign: 'center' }}>
-                <CheckCircle2 size={42} color="var(--green-term)" style={{ margin: '0 auto 12px' }} />
-                <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--green-term)' }}>
-                  БУРОВАЯ УСТАНОВКА ЗАГЛУШЕНА // КАРАНТИН БЕЗ СРОКА ДАВНОСТИ ВВЕДЕН
-                </div>
-                <div style={{ fontSize: '13px', color: '#fff', marginTop: '10px' }}>
-                  СИСТЕМНЫЙ КОД СЕКТОРА: <strong style={{ fontSize: '20px', color: 'var(--amber)' }}>[ 44 ]</strong>
-                </div>
-                <button className="btn-control" onClick={onBack} style={{ marginTop: '18px' }}>
-                  ВЕРНУТЬСЯ В ХАБ И ВВЕСТИ ФИНАЛЬНЫЙ КОД
-                </button>
+          {/* TAB 4: WORK ORDER CANCELLATION */}
+          {activeTab === 'order' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--red-alarm)' }}>
+                ЭЛЕКТРОННЫЙ НАРЯД НА БУРЕНИЕ №44-Б
               </div>
-            ) : (
-              <form onSubmit={handleRevokeOrder} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+              <form onSubmit={handleOrderSubmission} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    ПРАВОВОЕ ОСНОВАНИЕ ОТМЕНЫ (СОГЛАСНО УСТАВУ):
+                  <label style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', marginBottom: '6px' }}>
+                    ВЫБЕРИТЕ РЕЗОЛЮЦИЮ ДИСПЕТЧЕРА:
                   </label>
-                  <select
-                    value={selectedReason}
-                    onChange={(e) => setSelectedReason(e.target.value)}
-                    style={{
-                      width: '100%',
-                      background: '#0d0f13',
-                      border: '1px solid var(--border-light)',
-                      color: 'var(--amber)',
-                      padding: '8px',
-                      fontSize: '13px',
-                      fontFamily: 'inherit',
-                      marginTop: '4px',
-                    }}
-                  >
-                    <option value="">-- Выберите обоснование --</option>
-                    <option value="routine">Плановый перерыв смены (Отказ)</option>
-                    <option value="quarantine">КАРАНТИН БЕЗ СРОКА ДАВНОСТИ (Параграф 9-Б)</option>
-                    <option value="relocation">Перенос бура в соседний подъезд</option>
-                  </select>
-                </div>
-
-                <div style={{ background: '#090a0d', border: '1px solid var(--border-dim)', padding: '12px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    ОБЯЗАТЕЛЬНЫЕ ЭЛЕКТРОННЫЕ ПЕЧАТИ СОГЛАСОВАНИЯ:
-                  </div>
+                  
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: solved ? 'default' : 'pointer', fontSize: '12px', opacity: solved ? 0.6 : 1 }}>
                       <input
-                        type="checkbox"
-                        checked={seal1}
-                        onChange={(e) => setSeal1(e.target.checked)}
+                        type="radio"
+                        name="actionCode"
+                        value="DEMOLISH_NOW"
+                        disabled={solved}
+                        checked={selectedActionCode === 'DEMOLISH_NOW'}
+                        onChange={(e) => setSelectedActionCode(e.target.value)}
                       />
-                      <span>Печать службы акустического контроля ГСТК</span>
+                      <span>[НОРМАТИВ 112] Немедленно снести стену подвала (требование голоса из трубки)</span>
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: solved ? 'default' : 'pointer', fontSize: '12px', opacity: solved ? 0.6 : 1 }}>
                       <input
-                        type="checkbox"
-                        checked={seal2}
-                        onChange={(e) => setSeal2(e.target.checked)}
+                        type="radio"
+                        name="actionCode"
+                        value="DELAY_24H"
+                        disabled={solved}
+                        checked={selectedActionCode === 'DELAY_24H'}
+                        onChange={(e) => setSelectedActionCode(e.target.value)}
                       />
-                      <span>Печать изоляционного протокола (событие 1998 г.)</span>
+                      <span>[РЕГЛАМЕНТ 05] Отложить бурение на 24 часа для повторного обмера</span>
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: solved ? 'default' : 'pointer', fontSize: '12px', color: 'var(--green-term)', fontWeight: 700 }}>
                       <input
-                        type="checkbox"
-                        checked={seal3}
-                        onChange={(e) => setSeal3(e.target.checked)}
+                        type="radio"
+                        name="actionCode"
+                        value="QUARANTINE_PERMANENT"
+                        disabled={solved}
+                        checked={selectedActionCode === 'QUARANTINE_PERMANENT'}
+                        onChange={(e) => setSelectedActionCode(e.target.value)}
                       />
-                      <span>Электронная подпись ночного дежурного инженера</span>
+                      <span>[ПАРАГРАФ 19.8 УСТАВА] КАРАНТИН БЕЗ СРОКА ДАВНОСТИ. ЗАЛИТЬ БЕТОНОМ М500.</span>
                     </label>
                   </div>
                 </div>
 
-                {orderError && (
-                  <div style={{ color: 'var(--red-alarm)', fontSize: '12px', fontWeight: 800 }}>
-                    ОШИБКА: ТРЕБУЕТСЯ ВЫБРАТЬ «КАРАНТИН БЕЗ СРОКА ДАВНОСТИ» И ОТМЕТИТЬ ВСЕ 3 ПЕЧАТИ!
+                {formError && (
+                  <div style={{ color: 'var(--red-alarm)', fontWeight: 800, fontSize: '12px' }}>
+                    {formError}
                   </div>
                 )}
 
                 <button
                   type="submit"
+                  disabled={solved}
                   className="btn-control btn-danger"
-                  style={{ padding: '12px', justifyContent: 'center' }}
+                  style={{ padding: '10px 16px', marginTop: '10px' }}
                 >
-                  <ShieldAlert size={16} /> ОТОЗВАТЬ НАРЯД НА БУРЕНИЕ И ВВЕСТИ КАРАНТИН
+                  {solved ? '✓ РЕЗОЛЮЦИЯ ПРИНЯТА // БУР ЗАБЛОКИРОВАН' : 'ПОДТВЕРДИТЬ РЕЗОЛЮЦИЮ И ЗАБЛОКИРОВАТЬ БУР'}
                 </button>
               </form>
+
+              {solved && (
+                <div style={{ background: 'rgba(57, 230, 109, 0.1)', border: '1px solid var(--green-term)', padding: '12px' }}>
+                  <div style={{ color: 'var(--green-term)', fontWeight: 800, fontSize: '13px' }}>
+                    ✓ БУРОВАЯ УСТАНОВКА ЗАГЛУШЕНА. СТЕНА ЗАКОНСЕРВИРОВАНА.
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-main)', marginTop: '4px' }}>
+                    Акустический гул исчез. Наряд отозван. Финальный фрагмент кода: <strong>[ 44 ]</strong>.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
+
+        {/* Right Info Box */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          <div className="terminal-card" style={{ padding: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <span className="evidence-tag evidence-classified">ТОМ ДЕЛА №44-К</span>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
+                ЗАКЛЮЧЕНИЕ СПЕЦИАЛЬНОЙ КОМИССИИ
+              </span>
+            </div>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.6', marginBottom: '12px' }}>
+              Объект представляет собой подвальную полость, образованную над местом сокрытия трамвайного вагона №314 в монолите фундамента. Наблюдается нарушение физических констант.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-main)' }}>
+              <div className="doc-paper" style={{ padding: '8px 12px' }}>
+                <strong>ОТЧЕТ ГЕОДЕЗИИ:</strong> Длина луча интерферометра превышает предел измерений. Попытки разрушения кладки приводят к нелинейному расширению аномалии в жилые секции.
+              </div>
+              <div className="doc-paper" style={{ padding: '8px 12px' }}>
+                <strong>ПРОТОКОЛ БЕЗОПАСНОСТИ:</strong> Лица, выходящие на связь по внутренней телефонной линии, подлежат верификации на предмет заражения имитационными речевыми паттернами.
+              </div>
+            </div>
+          </div>
+
+          <div className="terminal-card" style={{ padding: '16px', background: '#0e1115' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>
+              СТАТУС КУПИРОВАНИЯ
+            </div>
+            {solved ? (
+              <div style={{ color: 'var(--green-term)', fontWeight: 800, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 size={16} /> КОД СЕКТОРА: [ 44 ]
+              </div>
+            ) : (
+              <div style={{ color: 'var(--red-alarm)', fontSize: '12px' }}>
+                Буровая бригада готовится к разрушению кирпичной кладки.
+              </div>
             )}
           </div>
-        )}
+
+          <div>
+            <button className="btn-control" onClick={onBack}>
+              <ArrowLeft size={14} /> ВЕРНУТЬСЯ НА ОБЩУЮ СХЕМУ
+            </button>
+          </div>
+
+        </div>
 
       </div>
 

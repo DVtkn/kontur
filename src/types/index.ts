@@ -14,6 +14,11 @@ export interface GameProgress {
   terminalInput: [string, string, string, string];
   secretUnlocked: boolean;
   soundEnabled: boolean;
+  photosensitiveMode: boolean;
+  streamerMode: boolean;
+  masterVolume?: number;
+  discoveredEasterEggs?: string[];
+  unlockedHints?: Record<string, number>;
 }
 
 export interface DispatchLog {
@@ -33,3 +38,13 @@ export interface MapIncident {
   atmosphere: string;
   codeFound: string;
 }
+
+export type HintLevel = 1 | 2 | 3;
+
+export interface CaseHint {
+  level1: string; // Направление мысли (легкий намек)
+  level2: string; // Ключевая улика (куда смотреть)
+  level3: string; // Прямой ответ (полное решение)
+}
+
+export type MobileNavTab = 'hub' | 'case' | 'clues' | 'hints' | 'terminal';

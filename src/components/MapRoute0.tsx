@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Radio, Terminal, Folder, FileText, AlertTriangle, ShieldAlert, ArrowLeft, Disc, CheckCircle2, Lock } from 'lucide-react';
+import { ObjectiveBanner } from './ObjectiveBanner';
 import { sound } from '../audio/soundEngine';
 
 interface MapRoute0Props {
   onComplete: (code: string) => void;
   onBack: () => void;
   alreadySolved: boolean;
+  onOpenHints?: () => void;
 }
 
 interface ArchiveFolder {
@@ -15,11 +17,11 @@ interface ArchiveFolder {
   content: string;
 }
 
-export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alreadySolved }) => {
+export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alreadySolved, onOpenHints }) => {
   const [activeTab, setActiveTab] = useState<'archive' | 'radio' | 'console'>('archive');
-  const [frequency, setFrequency] = useState<number>(94.5);
-  const [radioTuned, setRadioTuned] = useState<boolean>(false);
-  const [cleanerActive, setCleanerActive] = useState<boolean>(true);
+  const [frequency, setFrequency] = useState<number>(alreadySolved ? 104.2 : 94.5);
+  const [radioTuned, setRadioTuned] = useState<boolean>(alreadySolved);
+  const [cleanerActive, setCleanerActive] = useState<boolean>(!alreadySolved);
   const [selectedFolder, setSelectedFolder] = useState<string>('waybill314');
 
   // Folders being systematically purged by cleaner
@@ -55,7 +57,11 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
       id: 'classified_photo',
       name: 'ГРИФ: СЕКРЕТНО // Котлован жилого дома (1998)',
       deleted: false,
-      content: `[ФАЙЛ ЗАБЛОКИРОВАН АДМИНИСТРАТОРОМ СЕТИ. ТРЕБУЕТСЯ АВАРИЙНЫЙ КОД ДИСПЕТЧЕРА]`,
+      content: alreadySolved
+        ? `АКТ 1998 ГОДА (ЗАСЕКРЕЧЕНО):
+Котлован под жилым домом №3 по ул. Лесная. Целый трамвайный вагон №314 залит в монолитный бетон фундамента. К колесным тележкам и пантографу подведены силовые кабели объекта РЛС-4. Все 12 пассажиров замурованы внутри в качестве органического изолятора.
+КОД СЕКТОРА: [ 04 ]`
+        : `[ФАЙЛ ЗАБЛОКИРОВАН АДМИНИСТРАТОРОМ СЕТИ. ТРЕБУЕТСЯ АВАРИЙНЫЙ КОД ДИСПЕТЧЕРА]`,
     },
   ]);
 
@@ -63,11 +69,20 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
   const [terminalInput, setTerminalInput] = useState<string>('');
   const [cleanerTakeover, setCleanerTakeover] = useState<boolean>(false);
   const [solved, setSolved] = useState<boolean>(alreadySolved);
-  const [terminalLog, setTerminalLog] = useState<string[]>([
-    '02:30:11 Подключение к электронному архиву ТТУ...',
-    '02:30:14 АВТОРИЗОВАН ПОЛЬЗОВАТЕЛЬ [ID: ЧИСТИЛЬЩИК_0]',
-    '02:30:16 ВНИМАНИЕ: Начата процедура безвозвратного форматирования тома B:',
-  ]);
+  const [terminalLog, setTerminalLog] = useState<string[]>(
+    alreadySolved
+      ? [
+          '>> АРХИВ ТТУ // СЕКТОР КУПИРОВАН',
+          '>> КОД 3140 ПРИНЯТ. СОЕДИНЕНИЕ ЧИСТИЛЬЩИКА ПРИНУДИТЕЛЬНО РАЗОРВАНО.',
+          '>> ДОСТУП К ЗАСЕКРЕЧЕННОМУ ФАЙЛУ РАЗБЛОКИРОВАН.',
+          '>> КОД КУПИРОВАНИЯ СЕКТОРА: [ 04 ]',
+        ]
+      : [
+          '02:30:11 Подключение к электронному архиву ТТУ...',
+          '02:30:14 АВТОРИЗОВАН ПОЛЬЗОВАТЕЛЬ [ID: ЧИСТИЛЬЩИК_0]',
+          '02:30:16 ВНИМАНИЕ: Начата процедура безвозвратного форматирования тома B:',
+        ]
+  );
 
   // Cleaner deletion timer (every 22 seconds deletes a folder if not solved)
   useEffect(() => {
@@ -98,15 +113,29 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
     return () => clearTimeout(timer);
   }, [solved]);
 
+  const [secretFreq, setSecretFreq] = useState<'none' | 'morse' | 'echo'>('none');
+
   // Frequency slider handler
   const handleFreqChange = (val: number) => {
     setFrequency(val);
     const isTarget = Math.abs(val - 104.2) < 0.2;
-    sound.playRadioTuner(val, isTarget);
+    const isMorse = Math.abs(val - 98.0) < 0.2;
+    const isEcho = Math.abs(val - 91.4) < 0.2;
+
+    sound.playRadioTuner(val, isTarget || isMorse || isEcho);
 
     if (isTarget && !radioTuned) {
       setRadioTuned(true);
+      setSecretFreq('none');
       sound.playVoiceTransmission(340, 3.5);
+    } else if (isMorse) {
+      setSecretFreq('morse');
+      sound.playMorseCode('... --- ...  .---- ----. ----. ---..');
+    } else if (isEcho) {
+      setSecretFreq('echo');
+      sound.playVoiceTransmission(190, 2.8);
+    } else if (!isTarget) {
+      setSecretFreq('none');
     }
   };
 
@@ -114,10 +143,13 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
   const handleTerminalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sound.playKeypress();
+    const cmd = terminalInput.trim().toUpperCase();
+
     // Correct emergency code from black box: 3140
-    if (terminalInput.trim() === '3140') {
+    if (cmd === '3140') {
       sound.playScreamerThud();
       sound.playStatic(0.8, 0.1);
+      sound.triggerHaptic('success');
       setSolved(true);
       setCleanerTakeover(false);
       setCleanerActive(false);
@@ -140,25 +172,65 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
         )
       );
       onComplete('04');
+    } else if (cmd === 'HELP' || cmd === '?') {
+      setTerminalLog((prev) => [
+        ...prev,
+        '>> ДОСТУПНЫЕ КОМАНДЫ: 3140 (АВАРИЙНЫЙ КОД), STATUS, WHOAMI, SOKOLOV, CLEAR',
+      ]);
+    } else if (cmd === 'STATUS') {
+      setTerminalLog((prev) => [
+        ...prev,
+        `>> СТАТУС ТОМА: ${solved ? 'СТАБИЛЬНЫЙ // ИЗОЛИРОВАНО' : 'ФОРМАТИРОВАНИЕ ЧИСТИЛЬЩИКОМ'}`,
+        `>> ПОДКЛЮЧЕНИЕ: ${cleanerActive ? 'АКТИВЕН ВТОРОЙ ПОЛЬЗОВАТЕЛЬ [ЧИСТИЛЬЩИК]' : 'СОЕДИНЕНИЕ РАЗОРВАНО'}`,
+      ]);
+    } else if (cmd === 'WHOAMI') {
+      setTerminalLog((prev) => [
+        ...prev,
+        '>> ПОЛЬЗОВАТЕЛЬ: ОПЕРАТОР СМЕНЫ #4 (НЕАВТОРИЗОВАННЫЙ ВХОД)',
+        '>> УРОВЕНЬ ДОСТУПА: ВРЕМЕННЫЙ ПЕРЕХВАТ ДИСПЕТЧЕРА',
+      ]);
+    } else if (cmd === 'SOKOLOV' || cmd === 'LORE') {
+      sound.playGlitch();
+      setTerminalLog((prev) => [
+        ...prev,
+        '>> [ЗАСЕКРЕЧЕННАЯ ЗАПИСЬ СОКОЛОВА 1998]:',
+        '>> «Если читаешь это — не верь голосу в рации. Он повторяет то, что мы говорили перед крушением. Номер 3140 был кодом тормоза, а не сброса...»',
+      ]);
+    } else if (cmd === 'CLEAR') {
+      setTerminalLog(['>> ТЕРМИНАЛ ОЧИЩЕН']);
     } else {
       sound.playAlarm(2);
-      setTerminalLog((prev) => [...prev, `ОШИБКА: КОД ${terminalInput} НЕ РАСПОЗНАН ДИСПЕТЧЕРОМ`]);
+      sound.triggerHaptic('error');
+      setTerminalLog((prev) => [...prev, `ОШИБКА: КОМАНДА "${cmd}" НЕ РАСПОЗНАНА. ВВЕДИТЕ 3140 ИЛИ HELP`]);
     }
+    setTerminalInput('');
   };
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px', padding: '0 16px 40px' }}>
       
+      {/* Citycode Objective & Quest Banner */}
+      <ObjectiveBanner
+        step="ТОМ III // КАТАСТРОФА ВАГОНА №314"
+        title={
+          solved
+            ? "Архив ТТУ стабилизирован. Пароль стрелки раскрыт. Код сектора: [ 04 ]"
+            : "Спасите путевой лист от Чистильщика, поймайте радиоволну 104.2 FM и введите код перехвата в консоль"
+        }
+        isSolved={solved}
+        onOpenHints={onOpenHints || (() => {})}
+      />
+
       {/* Top Warning Banner */}
       <div className="terminal-card" style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Disc size={20} color="var(--amber)" />
           <div>
             <div style={{ fontWeight: 800, color: 'var(--amber)', fontSize: '14px' }}>
-              КАРТА 3: МАРШРУТ №0 // ЭЛЕКТРОННЫЙ АРХИВ ТРАМВАЙНОГО ДЕПО (1998)
+              ДЕЛО № 03-Д // АРХИВ ТТУ (КАТАСТРОФА ВАГОНА №314, АПРЕЛЬ 1998)
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              СТАТУС ТОМА: ФОРМАТИРОВАНИЕ ЧУЖИМ ПОЛЬЗОВАТЕЛЕМ [ID: ЧИСТИЛЬЩИК]
+              СТАТУС ТОМА: ВТОРЖЕНИЕ ВЕДОМСТВЕННОГО АЛГОРИТМА [ID: ЧИСТИЛЬЩИК] // СТИРАНИЕ ДЕЛ
             </div>
           </div>
         </div>
@@ -172,7 +244,7 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button
           className="btn-control"
           onClick={() => { sound.playClick(); setActiveTab('archive'); }}
@@ -197,7 +269,7 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
       </div>
 
       {/* Main Area */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px' }}>
+      <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px' }}>
         
         {/* Left Interactive Workspace */}
         <div className="terminal-card" style={{ padding: '16px', minHeight: '520px', display: 'flex', flexDirection: 'column' }}>
@@ -275,32 +347,61 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
                 В путевом листе указано, что водитель Соколов перед исчезновением слышал передачу на волне <strong>104.2 FM</strong>.
               </p>
 
-              {/* Frequency Digital Display */}
-              <div
-                style={{
-                  background: '#07080a',
-                  border: '2px solid var(--border-light)',
-                  padding: '24px',
-                  textAlign: 'center',
-                  boxShadow: radioTuned ? '0 0 20px var(--green-glow)' : 'none',
-                }}
-              >
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '2px' }}>ЧАСТОТА ПРИЕМА</div>
-                <div style={{ fontSize: '42px', fontWeight: 800, color: radioTuned ? 'var(--green-term)' : 'var(--amber)', fontFamily: 'var(--font-mono)' }}>
-                  {frequency.toFixed(1)} <span style={{ fontSize: '18px' }}>МГц</span>
+              {/* Analog Radio Receiver Unit with Reel-to-Reel Tape Deck */}
+              <div className="radio-chassis">
+                {/* Reel-to-Reel Tape Deck (Spinning when signal captured) */}
+                <div className="tape-reel-deck">
+                  <div className={`tape-reel ${radioTuned ? 'spinning' : ''}`}>
+                    <div className="tape-reel-spoke" />
+                    <div className="tape-reel-spoke" />
+                    <div className="tape-reel-spoke" />
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '2px' }}>БОБИНА МЛ-55</div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: radioTuned ? 'var(--green-term)' : 'var(--amber)' }}>
+                      {radioTuned ? '▶ ВОСПРОИЗВЕДЕНИЕ' : '⏸ ОЖИДАНИЕ ВОЛНЫ'}
+                    </div>
+                  </div>
+                  <div className={`tape-reel ${radioTuned ? 'spinning' : ''}`}>
+                    <div className="tape-reel-spoke" />
+                    <div className="tape-reel-spoke" />
+                    <div className="tape-reel-spoke" />
+                  </div>
                 </div>
-                <div style={{ fontSize: '12px', color: radioTuned ? 'var(--green-term)' : 'var(--red-alarm)', fontWeight: 700, marginTop: '6px' }}>
-                  {radioTuned ? '● СИГНАЛ ЗАХВАЧЕН: ЧЕРНЫЙ ЯЩИК ВАГОНА №314' : '○ ЭФИР: СТАТИЧЕСКИЙ ШУМ И ПРИБОЙ'}
-                </div>
-              </div>
 
-              {/* Slider Control */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-dim)' }}>
-                  <span>88.0 МГц</span>
-                  <span>104.2 МГц (Цель)</span>
-                  <span>108.0 МГц</span>
+                {/* Backlit Analog Frequency Glass Scale with Sliding Needle */}
+                <div className="radio-scale-glass">
+                  <div className="radio-scale-ticks" />
+                  <div
+                    className="radio-needle"
+                    style={{
+                      left: `${Math.max(2, Math.min(98, ((frequency - 88.0) / (108.0 - 88.0)) * 100))}%`,
+                    }}
+                  />
+                  {/* Subtle 104.2 marker */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: `${((104.2 - 88.0) / (108.0 - 88.0)) * 100}%`,
+                      top: 0,
+                      bottom: 0,
+                      width: '2px',
+                      background: 'rgba(57, 230, 109, 0.4)',
+                    }}
+                  />
                 </div>
+
+                {/* Frequency readout */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                    ДИАПАЗОН: 88.0 — 108.0 МГц
+                  </div>
+                  <div style={{ fontSize: '26px', fontWeight: 800, color: radioTuned ? 'var(--green-term)' : 'var(--amber)', fontFamily: 'var(--font-mono)' }}>
+                    {frequency.toFixed(1)} <span style={{ fontSize: '14px' }}>МГц</span>
+                  </div>
+                </div>
+
+                {/* Tuning Slider Knob */}
                 <input
                   type="range"
                   min="88.0"
@@ -308,8 +409,12 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
                   step="0.1"
                   value={frequency}
                   onChange={(e) => handleFreqChange(parseFloat(e.target.value))}
-                  style={{ accentColor: 'var(--amber)', width: '100%' }}
+                  style={{ accentColor: 'var(--amber)', width: '100%', height: '24px', cursor: 'pointer' }}
                 />
+                
+                <div style={{ fontSize: '11px', color: radioTuned ? 'var(--green-term)' : 'var(--red-alarm)', fontWeight: 700, marginTop: '8px', textAlign: 'center' }}>
+                  {radioTuned ? '● СИГНАЛ ЗАХВАЧЕН: ЧЕРНЫЙ ЯЩИК ВАГОНА №314' : '○ ЭФИР: СТАТИЧЕСКИЙ ШУМ И ПРИБОЙ'}
+                </div>
               </div>
 
               {/* Radio Decoded Transcript */}
@@ -320,6 +425,29 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
                   </div>
                   <div style={{ fontSize: '12px', color: '#e2f0ff', lineHeight: '1.6', fontStyle: 'italic' }}>
                     «...мы сошли с рельсов, но продолжаем ехать прямо по асфальту! Стрелка переведена на подземный тоннель объекта РЛС-4! Они замуровали нас в фундамент дома! Код диспетчера для экстренного сброса сети: <strong>3140</strong>! Повторяю: три, один, четыре, ноль!..»
+                  </div>
+                </div>
+              )}
+
+              {secretFreq === 'morse' && (
+                <div style={{ background: '#1c1610', border: '1px solid var(--amber)', padding: '14px', borderRadius: '4px' }}>
+                  <div style={{ color: 'var(--amber)', fontWeight: 800, fontSize: '12px', marginBottom: '6px' }}>
+                    📻 СЕКРЕТНЫЙ КАНАЛ // НОМЕРНАЯ РАДИОСТАНЦИЯ (98.0 МГц):
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#ffecbe', lineHeight: '1.6', fontFamily: 'monospace' }}>
+                    МОРЗЕ: ... --- ... / .---- ----. ----. ---.. (SOS 1998)<br />
+                    «...ГОРОДСКОЙ КОНТУР НЕ СПРАВЛЯЕТСЯ С НАПРЯЖЕНИЕМ. ЗАСЫПЬТЕ ТОННЕЛЬ...»
+                  </div>
+                </div>
+              )}
+
+              {secretFreq === 'echo' && (
+                <div style={{ background: '#1c1010', border: '1px solid var(--red-alarm)', padding: '14px', borderRadius: '4px' }}>
+                  <div style={{ color: 'var(--red-alarm)', fontWeight: 800, fontSize: '12px', marginBottom: '6px' }}>
+                    📻 СЕКРЕТНЫЙ КАНАЛ // АРХИВНОЕ ЭХО ТРАМВАЯ (91.4 МГц):
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#ffd0d0', lineHeight: '1.6', fontStyle: 'italic' }}>
+                    «Осторожно, двери закрываются. Следующая остановка — фундамент дома №3 по ул. Лесная. Выхода нет...»
                   </div>
                 </div>
               )}
@@ -356,7 +484,7 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
               <form onSubmit={handleTerminalSubmit} style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="text"
-                  placeholder="Введите 4-значный код диспетчера (3140)..."
+                  placeholder="Код аварийного сброса диспетчера..."
                   value={terminalInput}
                   onChange={(e) => setTerminalInput(e.target.value)}
                   style={{
@@ -386,14 +514,22 @@ export const MapRoute0: React.FC<MapRoute0Props> = ({ onComplete, onBack, alread
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           <div className="terminal-card" style={{ padding: '16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)', marginBottom: '8px' }}>
-              ИНСТРУКЦИЯ ПО РАССЛЕДОВАНИЮ
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <span className="evidence-tag evidence-classified">ТОМ ДЕЛА №03-Д</span>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--amber)' }}>
+                МАТЕРИАЛЫ КАТАСТРОФЫ 1998 ГОДА
+              </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-              <div>1. Откройте путевой лист в архиве и найдите упоминание частоты радиостанции.</div>
-              <div>2. Переключитесь на «Радиосканер» и настройте частоту ровно на <strong>104.2 МГц</strong>.</div>
-              <div>3. Прослушайте крик кондуктора и запишите код диспетчера (<strong>3140</strong>).</div>
-              <div>4. Перейдите в «Сетевую консоль», введите код и отключите Чистильщика до того, как он сотрет секретный файл.</div>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.6', marginBottom: '12px' }}>
+              14 апреля 1998 года в 23:58 трамвай КТМ-5М3 сошел с маршрута. Водитель Соколов И.В. доложил о переводе стрелки №3 на закрытый тоннель. Дело закрыто спецпостановлением.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-main)' }}>
+              <div className="doc-paper" style={{ padding: '8px 12px' }}>
+                <strong>ОТМЕТКА ВЕДОМСТВА:</strong> В служебном эфире ТТУ зафиксирован сигнал бортового регистратора. Частота аварийной волны указана в служебном путевом листе.
+              </div>
+              <div className="doc-paper" style={{ padding: '8px 12px' }}>
+                <strong>УГРОЗА ЛИКВИДАЦИИ:</strong> Удаленный субъект [ЧИСТИЛЬЩИК] запущен для стирания первичных документов. Прекратить форматирование возможно только через аварийный протокол консоли диспетчера.
+              </div>
             </div>
           </div>
 
